@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MetaGie Sycamore | Content Repurposing Toolkit</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    
+    <!-- QRCode -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#0f172a',
+                            purple: '#a855f7',
+                            green: '#22c55e', 
+                            teal: '#14b8a6'
+                        }
+                    },
+                    animation: {
+                        'gradient-x': 'gradient-x 3s ease infinite',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        'gradient-x': {
+                            '0%, 100%': {
+                                'background-size': '200% 200%',
+                                'background-position': 'left center'
+                            },
+                            '50%': {
+                                'background-size': '200% 200%',
+                                'background-position': 'right center'
+                            },
+                        },
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #050505;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .neon-text {
+            background: linear-gradient(to right, #a855f7, #22c55e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .neon-border {
+            position: relative;
+        }
+        .neon-border::after {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: linear-gradient(45deg, #a855f7, #22c55e);
+            border-radius: inherit;
+            z-index: -1;
+            opacity: 0.5;
+            filter: blur(10px);
+        }
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // --- Firebase Configuration ---
+        // REPLACE THESE WITH YOUR OWN FIREBASE CONFIG
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "SENDER_ID",
+            appId: "APP_ID"
+        };
+
+        // Initialize Firebase (Safely)
+        if (!firebase.apps.length) {
+            try {
+                firebase.initializeApp(firebaseConfig);
+            } catch (e) {
+                console.warn("Firebase not initialized. Add your config to enable DB features.");
+            }
+        }
+        
+        const auth = firebase.apps.length ? firebase.auth() : null;
+        const db = firebase.apps.length ? firebase.firestore() : null;
+
+        const { useState, useEffect, useRef } = React;
+
+        // --- Icons ---
+        const Icons = {
+            Download: () => <i data-lucide="download"></i>,
+            Video: () => <i data-lucide="video"></i>,
+            Music: () => <i data-lucide="music"></i>,
+            Scissors: () => <i data-lucide="scissors"></i>,
+            History: () => <i data-lucide="history"></i>,
+            LogOut: () => <i data-lucide="log-out"></i>,
+            LogIn: () => <i data-lucide="log-in"></i>,
+            Check: () => <i data-lucide="check-circle"></i>,
+            Alert: () => <i data-lucide="alert-circle"></i>,
+            Facebook: () => <i data-lucide="facebook"></i>,
+            Instagram: () => <i data-lucide="instagram"></i>,
+            QrCode: () => <i data-lucide="qr-code"></i>,
+            Loader: () => <i data-lucide="loader-2" className="animate-spin"></i>
+        };
+
+        // --- Helper: Icon component wrapper ---
+        const Icon = ({ name, className }) => {
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            }, [name]);
+            return <span className={className}>{Icons[name] ? Icons[name]() : null}</span>;
+        };
+
+        // --- Components ---
+
+        const Navbar = ({ user, onLogin, onLogout }) => (
+            <nav className="fixed top-0 w-full z-50 glass-panel border-b-0 border-b-slate-800">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between h-16">
+                        <div className="flex items-center gap-3">
+                            <div className="relative group">
+                                <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-green-500 rounded-full blur opacity-40 group-hover:opacity-75 transition duration-200"></div>
+                                <img src="logo.jpg" alt="Logo" className="relative h-10 w-10 rounded-full object-cover border-2 border-slate-900" onError={(e) => {e.target.style.display='none'; e.target.nextSibling.style.display='flex'}} />
+                                <div className="hidden relative h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-white border border-slate-700">MS</div>
+                            </div>
+                            <span className="text-xl font-bold tracking-tight">
+                                MetaGie <span className="neon-text">Sycamore</span>
+                            </span>
+                        </div>
+                        <div>
+                            {user ? (
+                                <div className="flex items-center gap-4">
+                                    <span className="hidden md:block text-sm text-slate-400">{user.email}</span>
+                                    <button onClick={onLogout} className="p-2 rounded-full hover:bg-slate-800 text-slate-300 transition">
+                                        <Icon name="LogOut" className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm font-medium transition border border-slate-700">
+                                    <Icon name="LogIn" className="w-4 h-4" />
+                                    <span>Sign In</span>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        );
+
+        const HistoryItem = ({ item }) => (
+            <div className="glass-panel p-4 rounded-xl flex items-center justify-between group hover:border-purple-500/50 transition duration-300">
+                <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-full ${
+                        item.platform === 'facebook' ? 'bg-blue-900/30 text-blue-400' :
+                        item.platform === 'instagram' ? 'bg-pink-900/30 text-pink-400' :
+                        'bg-slate-800 text-white'
+                    }`}>
+                        <Icon name={item.platform === 'tiktok' ? 'Video' : item.platform === 'facebook' ? 'Facebook' : 'Instagram'} className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h4 className="font-medium text-slate-200 line-clamp-1 w-32 md:w-64">{item.title || 'Unknown Video'}</h4>
+                        <p className="text-xs text-slate-500">{new Date(item.timestamp?.seconds * 1000).toLocaleDateString()}</p>
+                    </div>
+                </div>
+                <div className="flex gap-2">
+                    <span className="px-2 py-1 rounded text-xs bg-slate-800 text-slate-400 border border-slate-700 uppercase">{item.format}</span>
+                </div>
+            </div>
+        );
+
+        const App = () => {
+            const [url, setUrl] = useState('');
+            const [format, setFormat] = useState('mp4');
+            const [trimStart, setTrimStart] = useState('');
+            const [trimEnd, setTrimEnd] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [result, setResult] = useState(null);
+            const [error, setError] = useState(null);
+            const [user, setUser] = useState(null);
+            const [history, setHistory] = useState([]);
+            const [showHistory, setShowHistory] = useState(false);
+            const qrRef = useRef(null);
+
+            // Auth Listener
+            useEffect(() => {
+                if (auth) {
+                    const unsubscribe = auth.onAuthStateChanged((u) => {
+                        setUser(u);
+                        if (u) fetchHistory(u.uid);
+                    });
+                    return () => unsubscribe();
+                }
+            }, []);
+
+            // Generate QR Code when result changes
+            useEffect(() => {
+                if (result && result.downloadUrl && qrRef.current) {
+                    qrRef.current.innerHTML = "";
+                    new QRCode(qrRef.current, {
+                        text: result.downloadUrl,
+                        width: 100,
+                        height: 100,
+                        colorDark : "#ffffff",
+                        colorLight : "#000000",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                }
+            }, [result]);
+
+            const fetchHistory = async (uid) => {
+                if (!db) return;
+                try {
+                    const snap = await db.collection('users').doc(uid).collection('downloads')
+                        .orderBy('timestamp', 'desc').limit(10).get();
+                    const items = snap.docs.map(doc => ({id: doc.id, ...doc.data()}));
+                    setHistory(items);
+                } catch (err) {
+                    console.error("Error fetching history:", err);
+                }
+            };
+
+            const handleLogin = async () => {
+                if (!auth) {
+                    alert("Firebase config missing. Edit the HTML file to add your keys.");
+                    return;
+                }
+                const provider = new firebase.auth.GoogleAuthProvider();
+                try {
+                    await auth.signInWithPopup(provider);
+                } catch (err) {
+                    console.error(err);
+                    setError("Login failed.");
+                }
+            };
+
+            const handleLogout = () => auth.signOut();
+
+            const processDownload = async () => {
+                if (!url) {
+                    setError("Please enter a valid URL");
+                    return;
+                }
+                
+                setError(null);
+                setResult(null);
+                setLoading(true);
+
+                try {
+                    // --- SIMULATION FOR PREVIEW ---
+                    // In the real app, this calls /.netlify/functions/download
+                    // Since we can't run python/backend in this preview, we simulate a success
+                    
+                    // const response = await fetch('/.netlify/functions/download', { 
+                    //    method: 'POST', body: JSON.stringify({ url, format, trimStart, trimEnd }) 
+                    // });
+                    // const data = await response.json();
+
+                    // MOCK DELAY & RESULT
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    const mockResult = {
+                        title: "Viral Dance Video 2024",
+                        thumbnail: "https://placehold.co/600x400/1e293b/a855f7?text=Video+Thumbnail",
+                        downloadUrl: "#", // In real app, this is a temporary signed URL
+                        platform: url.includes('facebook') ? 'facebook' : url.includes('instagram') ? 'instagram' : 'tiktok',
+                        format: format
+                    };
+
+                    setResult(mockResult);
+
+                    // Save to History if logged in
+                    if (user && db) {
+                        await db.collection('users').doc(user.uid).collection('downloads').add({
+                            url,
+                            platform: mockResult.platform,
+                            format,
+                            title: mockResult.title,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        fetchHistory(user.uid);
+                    }
+
+                } catch (err) {
+                    setError(err.message || "Extraction failed. Check the URL and try again.");
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen pb-20 relative">
+                    {/* Background Elements */}
+                    <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+                        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-900/20 rounded-full blur-[120px]"></div>
+                        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-green-900/20 rounded-full blur-[120px]"></div>
+                    </div>
+
+                    <Navbar user={user} onLogin={handleLogin} onLogout={handleLogout} />
+
+                    <main className="pt-28 px-4 max-w-4xl mx-auto space-y-12">
+                        
+                        {/* Hero Section */}
+                        <div className="text-center space-y-4">
+                            <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
+                                Repurpose Content <br />
+                                <span className="neon-text">Without Limits</span>
+                            </h1>
+                            <p className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto">
+                                The ultimate toolkit to download, extract, and trim videos from social media. 
+                                Secure, fast, and high-quality.
+                            </p>
+                        </div>
+
+                        {/* Main Tool Card */}
+                        <div className="glass-panel rounded-2xl p-1 md:p-8 neon-border shadow-2xl shadow-purple-900/20">
+                            <div className="p-4 md:p-6 space-y-6 bg-slate-900/50 rounded-xl">
+                                
+                                {/* Input Area */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-slate-400 ml-1">Video URL</label>
+                                    <div className="relative">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Paste Facebook, Instagram, or TikTok link here..." 
+                                            value={url}
+                                            onChange={(e) => setUrl(e.target.value)}
+                                            className="w-full bg-slate-950/50 border border-slate-700 text-white rounded-xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-purple-500 transition placeholder-slate-600"
+                                        />
+                                        <div className="absolute right-3 top-3">
+                                            <button 
+                                                onClick={async () => {
+                                                    try {
+                                                        const text = await navigator.clipboard.readText();
+                                                        setUrl(text);
+                                                    } catch(e){}
+                                                }}
+                                                className="px-3 py-1 bg-slate-800 text-xs rounded-md text-slate-400 hover:text-white transition"
+                                            >
+                                                PASTE
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Controls */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-slate-400 ml-1">Format</label>
+                                        <div className="grid grid-cols-2 gap-2 bg-slate-950/50 p-1 rounded-lg border border-slate-700">
+                                            <button 
+                                                onClick={() => setFormat('mp4')}
+                                                className={`flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition ${format === 'mp4' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                            >
+                                                <Icon name="Video" className="w-4 h-4" /> MP4 Video
+                                            </button>
+                                            <button 
+                                                onClick={() => setFormat('mp3')}
+                                                className={`flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition ${format === 'mp3' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                            >
+                                                <Icon name="Music" className="w-4 h-4" /> MP3 Audio
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-slate-400 ml-1">Trim (Optional)</label>
+                                        <div className="flex gap-2">
+                                            <div className="relative w-full">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="00:00" 
+                                                    value={trimStart}
+                                                    onChange={(e) => setTrimStart(e.target.value)}
+                                                    className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-center focus:ring-1 focus:ring-purple-500 outline-none" 
+                                                />
+                                                <span className="absolute left-2 top-2 text-slate-600 text-xs">Start</span>
+                                            </div>
+                                            <div className="text-slate-600 self-center">-</div>
+                                            <div className="relative w-full">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="00:00" 
+                                                    value={trimEnd}
+                                                    onChange={(e) => setTrimEnd(e.target.value)}
+                                                    className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-center focus:ring-1 focus:ring-purple-500 outline-none" 
+                                                />
+                                                <span className="absolute left-2 top-2 text-slate-600 text-xs">End</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Action Button */}
+                                <button 
+                                    onClick={processDownload}
+                                    disabled={loading}
+                                    className="w-full py-4 rounded-xl font-bold text-lg bg-gradient-to-r from-purple-600 to-green-500 hover:from-purple-500 hover:to-green-400 transform hover:scale-[1.01] transition-all shadow-lg shadow-purple-900/25 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                                >
+                                    {loading ? (
+                                        <>
+                                            <Icon name="Loader" className="w-6 h-6 animate-spin" /> Processing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Icon name="Download" className="w-6 h-6" /> Extract Content
+                                        </>
+                                    )}
+                                </button>
+                                
+                                {error && (
+                                    <div className="p-4 bg-red-900/20 border border-red-900/50 rounded-lg text-red-200 text-sm flex items-center gap-2">
+                                        <Icon name="Alert" className="w-4 h-4" /> {error}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Result Section */}
+                        {result && (
+                            <div className="glass-panel p-6 rounded-2xl animate-fade-in border-t-2 border-green-500">
+                                <div className="flex flex-col md:flex-row gap-6">
+                                    <div className="w-full md:w-1/3 bg-black rounded-lg overflow-hidden relative group">
+                                        <img src={result.thumbnail} alt="Thumbnail" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition" />
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="bg-white/20 backdrop-blur p-3 rounded-full">
+                                                <Icon name="Check" className="w-8 h-8 text-white" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex-1 space-y-4">
+                                        <div>
+                                            <h3 className="text-xl font-bold text-white">{result.title}</h3>
+                                            <p className="text-slate-400 text-sm mt-1 capitalize">Source: {result.platform} • {result.format.toUpperCase()}</p>
+                                        </div>
+
+                                        <div className="flex gap-3">
+                                            <a href={result.downloadUrl} download className="flex-1 bg-white text-black py-3 rounded-lg font-bold hover:bg-slate-200 transition flex items-center justify-center gap-2">
+                                                <Icon name="Download" className="w-4 h-4" /> Download File
+                                            </a>
+                                            <button className="px-4 py-3 bg-slate-800 rounded-lg hover:bg-slate-700 border border-slate-700">
+                                                <Icon name="Scissors" className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+                                            <div className="text-xs text-slate-500">Scan to download on mobile</div>
+                                            <div className="bg-white p-1 rounded">
+                                                <div ref={qrRef}></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* History Section */}
+                        {user && (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h2 className="text-2xl font-bold flex items-center gap-2">
+                                        <Icon name="History" className="w-6 h-6 text-purple-500" /> Recent Activity
+                                    </h2>
+                                </div>
+                                
+                                <div className="grid gap-3">
+                                    {history.length > 0 ? (
+                                        history.map(item => <HistoryItem key={item.id} item={item} />)
+                                    ) : (
+                                        <div className="text-center py-8 text-slate-500 bg-slate-900/30 rounded-xl border border-dashed border-slate-800">
+                                            No downloads yet. Start repurposing content!
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                    </main>
+
+                    <footer className="mt-20 border-t border-slate-900 py-8 text-center text-slate-600 text-sm">
+                        <p>&copy; 2024 MetaGie Sycamore. For educational purposes only.</p>
+                        <p className="mt-2">Ensure you have the right to download and use the content you process.</p>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
